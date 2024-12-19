@@ -1,5 +1,5 @@
 ﻿ffmpeg==1.4
-moviepy==2.1.1
+moviepy==1.0.3
 pytube==15.0.0
 streamlit==1.36.0
 yt-dlp==2024.10.1.232843.dev0
