@@ -327,20 +327,21 @@ def process_video_file(input_file: BytesIO, output_format: str, resolution: tupl
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_input_file:
             temp_input_file.write(input_file.read())
             temp_input_path = temp_input_file.name
-
+        st.write("1")
         # Load the input video from the temporary file
         video_clip = mp.VideoFileClip(temp_input_path)
-
+        st.write("2")
         # If a resolution is provided, resize the video
         if resolution:
             video_clip = resize(video_clip, newsize=resolution)
-
+        st.write("3")
         # Save the processed video to a temporary output file
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_format}") as temp_output_file:
             temp_output_path = temp_output_file.name
+        st.write("4")
         video_clip.write_videofile(temp_output_path, codec="libx264", audio_codec="aac")
         video_clip.close()
-
+        st.write("5")
         # Read the processed file back into a BytesIO object
         output_bytes = BytesIO()
         with open(temp_output_path, "rb") as temp_file:
