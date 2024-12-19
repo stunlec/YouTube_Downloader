@@ -14,6 +14,9 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 import moviepy.editor as mp
 from yt_dlp import YoutubeDL
 import os
+import cv2
+import tempfile
+from io import BytesIO
 
 
 def get_video_info(link):
@@ -308,53 +311,131 @@ def download_and_clip_youtube_video(link, start_time=None, end_time=None):
 #         print(f"Error: {str(e)}")
 #         return None
 
+#
+#
+# def process_video_file(input_file: BytesIO, output_format: str, resolution: tuple = None) -> BytesIO:
+#     """
+#     Process a video file in BytesIO format and convert it to the desired format and resolution.
+#
+#     Args:
+#         input_file (BytesIO): Input video file in BytesIO format.
+#         output_format (str): Desired file format (e.g., 'mp4', 'mp3', 'avi').
+#         resolution (tuple, optional): Desired resolution as (width, height). Only applicable for video formats.
+#
+#     Returns:
+#         BytesIO: Processed file in the desired format as a BytesIO object.
+#     """
+#     try:
+#         # Save BytesIO content to a temporary file
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_input_file:
+#             temp_input_file.write(input_file.read())
+#             temp_input_path = temp_input_file.name
+#         st.write("1")
+#         # Load the input video from the temporary file
+#         video_clip = mp.VideoFileClip(temp_input_path)
+#         st.write("2")
+#         # If a resolution is provided, resize the video
+#         if resolution:
+#             video_clip = resize(video_clip, newsize=resolution)
+#         st.write("3")
+#         # Save the processed video to a temporary output file
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_format}") as temp_output_file:
+#             temp_output_path = temp_output_file.name
+#         st.write("4")
+#         video_clip.write_videofile(temp_output_path, codec="libx264", audio_codec="aac")
+#         video_clip.close()
+#         st.write("5")
+#         # Read the processed file back into a BytesIO object
+#         output_bytes = BytesIO()
+#         with open(temp_output_path, "rb") as temp_file:
+#             output_bytes.write(temp_file.read())
+#         output_bytes.seek(0)
+#
+#         # Clean up temporary files
+#         import os
+#         os.remove(temp_input_path)
+#         os.remove(temp_output_path)
+#
+#         return output_bytes
+#
+#     except Exception as e:
+#         print(f"Error processing video file: {e}")
+#         return None
 
+import cv2
+from moviepy.editor import VideoFileClip
 
 def process_video_file(input_file: BytesIO, output_format: str, resolution: tuple = None) -> BytesIO:
     """
-    Process a video file in BytesIO format and convert it to the desired format and resolution.
+    Process a video file in BytesIO format, resize it using OpenCV, and retain the original audio.
 
     Args:
         input_file (BytesIO): Input video file in BytesIO format.
-        output_format (str): Desired file format (e.g., 'mp4', 'mp3', 'avi').
-        resolution (tuple, optional): Desired resolution as (width, height). Only applicable for video formats.
+        output_format (str): Desired file format (e.g., 'mp4').
+        resolution (tuple, optional): Desired resolution as (width, height).
 
     Returns:
         BytesIO: Processed file in the desired format as a BytesIO object.
     """
     try:
-        # Save BytesIO content to a temporary file
+        import tempfile, os
+
+        # Save input file to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_input_file:
             temp_input_file.write(input_file.read())
             temp_input_path = temp_input_file.name
-        st.write("1")
-        # Load the input video from the temporary file
-        video_clip = mp.VideoFileClip(temp_input_path)
-        st.write("2")
-        # If a resolution is provided, resize the video
+
+        # Temporary path for resized video
+        temp_resized_path = temp_input_path.replace(".mp4", "_resized.mp4")
+
         if resolution:
-            video_clip = resize(video_clip, newsize=resolution)
-        st.write("3")
-        # Save the processed video to a temporary output file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_format}") as temp_output_file:
-            temp_output_path = temp_output_file.name
-        st.write("4")
-        video_clip.write_videofile(temp_output_path, codec="libx264", audio_codec="aac")
-        video_clip.close()
-        st.write("5")
-        # Read the processed file back into a BytesIO object
+            # Resize video using OpenCV
+            cap = cv2.VideoCapture(temp_input_path)
+            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            out = cv2.VideoWriter(temp_resized_path, fourcc, fps, resolution)
+
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                resized_frame = cv2.resize(frame, resolution, interpolation=cv2.INTER_AREA)
+                out.write(resized_frame)
+
+            cap.release()
+            out.release()
+
+            # Update input path to the resized video
+            temp_input_path = temp_resized_path
+
+        # Add audio back using MoviePy
+        resized_clip = VideoFileClip(temp_input_path)
+        original_clip = VideoFileClip(temp_input_file.name)
+
+        if original_clip.audio:
+            resized_clip = resized_clip.set_audio(original_clip.audio)
+
+        # Save final output to a temporary file
+        temp_final_path = temp_input_path.replace("_resized.mp4", f"_final.{output_format}")
+        resized_clip.write_videofile(temp_final_path, codec="libx264", audio_codec="aac")
+        resized_clip.close()
+        original_clip.close()
+
+        # Read the final video file into BytesIO
         output_bytes = BytesIO()
-        with open(temp_output_path, "rb") as temp_file:
+        with open(temp_final_path, "rb") as temp_file:
             output_bytes.write(temp_file.read())
         output_bytes.seek(0)
 
         # Clean up temporary files
-        import os
+        os.remove(temp_input_file.name)
         os.remove(temp_input_path)
-        os.remove(temp_output_path)
+        os.remove(temp_final_path)
 
         return output_bytes
 
     except Exception as e:
         print(f"Error processing video file: {e}")
         return None
+
+
